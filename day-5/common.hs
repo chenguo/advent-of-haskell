@@ -3,8 +3,10 @@ module Common (
   duplicateCounter,
   blacklist,
   pairDupes,
+  spacedDupes,
   state,
-  consume
+  consume,
+  TextState
 ) where
 
 import Data.Maybe (fromJust)
@@ -66,22 +68,17 @@ blacklist n strs = Blacklist n strs [] True
 
 instance TextState Blacklist where
   consume c (Blacklist n strs cs st)
-    | st == False = Blacklist n' strs cs' st
-    | otherwise   = updateState $ Blacklist n' strs cs' st
+    | st == False = Blacklist n strs cs' st
+    | otherwise   = updateState $ Blacklist n strs cs' st
     where cs' = updateCharRun n cs c
-          n' = updateCharN n
   state (Blacklist _ _ _ st) = st
-  updateState (Blacklist n strs cs False) = Blacklist n strs cs False
+  updateState bl@(Blacklist n strs cs False) = bl
   updateState (Blacklist n strs cs _) = Blacklist n strs cs (not (any (== cs) strs))
 
-
 updateCharRun :: Int -> [Char] -> Char -> [Char]
-updateCharRun 0 cs c = (tail cs) ++ [c]
-updateCharRun _ cs c = cs ++ [c]
-
-updateCharN :: Int -> Int
-updateCharN 0 = 0
-updateCharN n = n - 1
+updateCharRun n cs c
+  | n == length cs = (tail cs) ++ [c]
+  | otherwise        = cs ++ [c]
 
 
 -- Non-overlapping pair duplicates
@@ -89,21 +86,38 @@ data DupeRuns = DupeRuns Int Int (Map.Map String Int) String Bool
 pairDupes n = DupeRuns n (-1 * n) Map.empty "" False
 
 instance TextState DupeRuns where
-  consume c (DupeRuns n pos m cs st)
-    | st == True = DupeRuns n pos' m cs' st
-    | otherwise  = updateState $ DupeRuns n pos' m cs' st
-    where pos' = pos + 1
-          cs' = updateCharRun n cs c
+  consume c dupes@(DupeRuns _ _ _ _ True) = dupes
+  consume c (DupeRuns n pos m cs False) =
+    let pos' = pos + 1
+        cs' = updateCharRun n cs c
+    in updateState (DupeRuns n pos' m cs' False)
   state (DupeRuns _ _ _ _ st) = st
-  updateState (DupeRuns n pos m cs st)
-    | hasDupeRun n pos m cs = DupeRuns n pos m cs st
-    | pos >= 0 =
-        let m' = Map.insert cs pos m
-        in DupeRuns n pos m' cs st
-    | otherwise = DupeRuns n pos m cs st
+  updateState dupes@(DupeRuns _ _ _ _ True) = dupes
+  updateState (DupeRuns n pos m cs False) =
+    DupeRuns n pos (addRunToMap m pos cs) cs (hasDupeRun n m pos cs)
 
-hasDupeRun :: Int -> Int -> (Map.Map String Int) -> String -> Bool
-hasDupeRun n pos m cs
-  | pos < 0         = False
-  | Map.member cs m = (fromJust (Map.lookup cs m)) > pos - n
+hasDupeRun :: Int -> (Map.Map String Int) -> Int -> String -> Bool
+hasDupeRun n m pos cs
+  | pos < n         = False
+  | Map.member cs m = (fromJust (Map.lookup cs m)) + n <= pos
   | otherwise       = False
+
+addRunToMap :: (Map.Map String Int) -> Int -> String -> (Map.Map String Int)
+addRunToMap m pos cs
+  | Map.member cs m = m
+  | pos >= 0        = Map.insert cs pos m
+  | otherwise       = m
+
+
+-- Duplicate letter with spacing
+data SpacedDupes = SpacedDupes Int String Bool
+spacedDupes n = SpacedDupes (n + 2) "" False
+
+instance TextState SpacedDupes where
+  consume c dupes@(SpacedDupes _ _ True) = dupes
+  consume c (SpacedDupes n cs st) = updateState $ SpacedDupes n cs' st
+    where cs' = updateCharRun n cs c
+  state (SpacedDupes _ _ st) = st
+  updateState (SpacedDupes n cs@(c0:c1:c2:[]) st) =
+    SpacedDupes n cs (c0 == c2)
+  updateState dupes = dupes

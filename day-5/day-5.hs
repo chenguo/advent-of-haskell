@@ -1,21 +1,10 @@
-import Common (vowelCounter, duplicateCounter, blacklist, state, consume)
+import Common (vowelCounter, duplicateCounter, blacklist, state, consume, TextState)
 
 main :: IO()
 main = interact $ show . solve . lines
 
 solve :: [String] -> Int
 solve = length . filter checkState
-
--- counters :: TextState a => [a]
--- counters = [(vowelCounter 3), (duplicateCounter 2)]
-
-
--- checkState :: (TextState a, TextState b) => (a,b) -> [Char] -> Bool
--- checkState preds [] = all state preds
--- checkState preds (c:cs)
---   | all state newPreds = True
---   | otherwise          = checkState newPreds cs
---   where newPreds       = map (consume c) preds
 
 combinedState vowels dupes blacklist = (state vowels)
                                        && (state dupes)
